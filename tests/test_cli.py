@@ -14,7 +14,7 @@ from ocelint.cli import main
 
 @pytest.fixture
 def empty_log(tmp_path: Path) -> Path:
-    """Minimally-clean log: one event referencing one object, no rule violations."""
+    """Minimally-clean log: two events with repeated qualifier, no rule violations."""
     payload = {
         "eventTypes": [{"name": "T", "attributes": []}],
         "objectTypes": [{"name": "Order", "attributes": []}],
@@ -25,7 +25,14 @@ def empty_log(tmp_path: Path) -> Path:
                 "time": "2026-01-01T00:00:00Z",
                 "attributes": [],
                 "relationships": [{"objectId": "o1", "qualifier": "creates"}],
-            }
+            },
+            {
+                "id": "e2",
+                "type": "T",
+                "time": "2026-01-02T00:00:00Z",
+                "attributes": [],
+                "relationships": [{"objectId": "o1", "qualifier": "creates"}],
+            },
         ],
         "objects": [{"id": "o1", "type": "Order", "attributes": [], "relationships": []}],
     }
@@ -62,7 +69,7 @@ def test_lint_json_output(empty_log: Path) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["source_format"] == "json"
-    assert payload["events"] == 1
+    assert payload["events"] == 2
     assert payload["objects"] == 1
     assert payload["violations"] == []
     assert payload["parse_warnings"] == []
