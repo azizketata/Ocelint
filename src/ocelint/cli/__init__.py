@@ -99,6 +99,20 @@ def list_rules() -> None:
 
 
 @main.command()
+@click.argument("code")
+def explain(code: str) -> None:
+    """Print the description and severity of a rule by code (e.g. 'S001')."""
+    code_upper = code.upper()
+    matches = [r for r in BUILTIN_RULES if r.code == code_upper]
+    if not matches:
+        click.echo(f"Unknown rule code: {code!r}. See `ocelint list-rules`.", err=True)
+        sys.exit(1)
+    rule = matches[0]
+    click.echo(f"{rule.code}  ({rule.severity})")
+    click.echo(f"  {rule.description}")
+
+
+@main.command()
 def init() -> None:
     """Generate a [tool.ocelint] config block in pyproject.toml."""
     pp = Path("pyproject.toml")
