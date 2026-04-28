@@ -124,7 +124,7 @@ async function lintDocument(
     if (ac.signal.aborted) {
       return;
     }
-    const diags = sarifToDiagnostics(sarif);
+    const diags = sarifToDiagnostics(sarif, doc);
     diag.set(doc.uri, diags);
     statusBar.refresh(doc, diag);
   } catch (e) {

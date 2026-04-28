@@ -2,7 +2,7 @@
   "name": "ocelint",
   "displayName": "OCELint",
   "description": "Semantic linter for OCEL 2.0 event logs.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "azizketata",
   "license": "MIT",
   "repository": {
