@@ -164,3 +164,61 @@ def test_lint_sarif_includes_results_and_rules(log_with_dup_event: Path) -> None
     assert {"S001", "S002", "R001"} <= rule_ids
     result_rules = {r["ruleId"] for r in run["results"]}
     assert "S001" in result_rules
+
+
+def test_lint_with_config_ignore_suppresses_rule(
+    tmp_path: Path, log_with_dup_event: Path
+) -> None:
+    cfg = tmp_path / "pyproject.toml"
+    cfg.write_text('[tool.ocelint]\nignore = ["S001"]\n', encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(log_with_dup_event), "--config", str(cfg), "--format", "json"],
+    )
+    payload = json.loads(result.output)
+    codes = {v["code"] for v in payload["violations"]}
+    assert "S001" not in codes
+
+
+def test_lint_with_config_select_only_keeps_listed(
+    tmp_path: Path, log_with_dup_event: Path
+) -> None:
+    cfg = tmp_path / "pyproject.toml"
+    cfg.write_text('[tool.ocelint]\nselect = ["R001"]\n', encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(log_with_dup_event), "--config", str(cfg), "--format", "json"],
+    )
+    payload = json.loads(result.output)
+    codes = {v["code"] for v in payload["violations"]}
+    assert codes <= {"R001"}
+
+
+def test_lint_with_config_severity_override_changes_exit_code(
+    tmp_path: Path, log_with_dup_event: Path
+) -> None:
+    cfg = tmp_path / "pyproject.toml"
+    cfg.write_text(
+        '[tool.ocelint]\n[tool.ocelint.severity]\nS001 = "info"\n',
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(log_with_dup_event), "--config", str(cfg)]
+    )
+    assert result.exit_code == 0
+
+
+def test_lint_with_invalid_config_exits_2(
+    tmp_path: Path, log_with_dup_event: Path
+) -> None:
+    cfg = tmp_path / "pyproject.toml"
+    cfg.write_text('[tool.ocelint]\nselect = "not-a-list"\n', encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(log_with_dup_event), "--config", str(cfg)]
+    )
+    assert result.exit_code == 2
+    assert "select" in result.stderr

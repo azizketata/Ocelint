@@ -10,7 +10,8 @@ from typing import Any
 import click
 
 from ocelint import __version__
-from ocelint.engine import Violation, max_severity, run_rules
+from ocelint.config import ConfigError, filter_rules, load_config
+from ocelint.engine import Rule, Violation, max_severity, run_rules
 from ocelint.loader import ParseError, load
 from ocelint.model import OcelLog
 from ocelint.rules import BUILTIN_RULES
@@ -42,22 +43,37 @@ def main() -> None:
     show_default=True,
     help="Output format.",
 )
-def lint(file: Path, fmt: str) -> None:
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to pyproject.toml (auto-detected from cwd if omitted).",
+)
+def lint(file: Path, fmt: str, config_path: Path | None) -> None:
     """Lint an OCEL 2.0 file."""
+    try:
+        cfg = load_config(config_path)
+    except ConfigError as e:
+        click.echo(str(e), err=True)
+        sys.exit(2)
+
+    rules = filter_rules(BUILTIN_RULES, cfg)
+
     try:
         log = load(file)
     except ParseError as e:
         click.echo(str(e), err=True)
         sys.exit(2)
 
-    violations = run_rules(log, BUILTIN_RULES)
+    violations = run_rules(log, rules)
 
     if fmt == "text":
-        _print_text(log, violations)
+        _print_text(log, violations, rules)
     elif fmt == "json":
         click.echo(_json.dumps(_json_envelope(log, violations), indent=2))
     else:
-        click.echo(_json.dumps(_sarif_envelope(log, violations), indent=2))
+        click.echo(_json.dumps(_sarif_envelope(log, violations, rules), indent=2))
 
     sys.exit(_compute_exit_code(violations))
 
@@ -110,7 +126,7 @@ def _json_envelope(log: OcelLog, violations: list[Violation]) -> dict[str, Any]:
     return summary
 
 
-def _print_text(log: OcelLog, violations: list[Violation]) -> None:
+def _print_text(log: OcelLog, violations: list[Violation], rules: list[Rule]) -> None:
     s = _summary_dict(log)
     click.echo(f"Loaded {s['source_path']} ({s['source_format']})")
     click.echo(f"  events:        {s['events']:>10,}")
@@ -120,6 +136,7 @@ def _print_text(log: OcelLog, violations: list[Violation]) -> None:
     click.echo(f"  event types:   {s['event_types']:>10}")
     click.echo(f"  object types:  {s['object_types']:>10}")
     click.echo(f"  attr decls:    {s['attribute_decls']:>10}")
+    click.echo(f"  rules enabled: {len(rules):>10} of {len(BUILTIN_RULES)}")
 
     warnings = s["parse_warnings"]
     if warnings:
@@ -136,14 +153,16 @@ def _print_text(log: OcelLog, violations: list[Violation]) -> None:
         click.echo("\nNo violations.")
 
 
-def _sarif_envelope(log: OcelLog, violations: list[Violation]) -> dict[str, Any]:
+def _sarif_envelope(
+    log: OcelLog, violations: list[Violation], rules: list[Rule]
+) -> dict[str, Any]:
     rules_block = [
         {
             "id": rule.code,
             "shortDescription": {"text": rule.description},
             "defaultConfiguration": {"level": _SEVERITY_TO_SARIF[rule.severity]},
         }
-        for rule in BUILTIN_RULES
+        for rule in rules
     ]
     results = [
         {
