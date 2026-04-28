@@ -18,7 +18,7 @@ from pathlib import Path
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 from ocelint.engine import Rule, Severity
 
@@ -104,13 +104,13 @@ def _pattern_matches(pattern: str, code: str) -> bool:
     return False
 
 
-def _str_list_or_none(section: dict, key: str, path: Path) -> list[str] | None:
+def _str_list_or_none(section: dict[str, object], key: str, path: Path) -> list[str] | None:
     if key not in section:
         return None
     return _str_list(section, key, path)
 
 
-def _str_list(section: dict, key: str, path: Path) -> list[str]:
+def _str_list(section: dict[str, object], key: str, path: Path) -> list[str]:
     value = section.get(key, [])
     if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
         raise ConfigError(f"{path}: [tool.ocelint].{key} must be a list of strings")

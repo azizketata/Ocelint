@@ -11,7 +11,7 @@ from ocelint.engine import Rule, Violation
 from ocelint.rules import BUILTIN_RULES
 
 
-def _no_op_check(_log: object) -> "list[Violation]":
+def _no_op_check(_log: object) -> list[Violation]:
     return []
 
 

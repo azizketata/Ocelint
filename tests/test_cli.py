@@ -199,16 +199,19 @@ def test_lint_with_config_select_only_keeps_listed(
 def test_lint_with_config_severity_override_changes_exit_code(
     tmp_path: Path, log_with_dup_event: Path
 ) -> None:
+    """Downgrading S001 from error to info changes the rule's contribution to exit code."""
     cfg = tmp_path / "pyproject.toml"
     cfg.write_text(
-        '[tool.ocelint]\n[tool.ocelint.severity]\nS001 = "info"\n',
+        '[tool.ocelint]\nselect = ["S001"]\n[tool.ocelint.severity]\nS001 = "info"\n',
         encoding="utf-8",
     )
     runner = CliRunner()
     result = runner.invoke(
-        main, ["lint", str(log_with_dup_event), "--config", str(cfg)]
+        main, ["lint", str(log_with_dup_event), "--config", str(cfg), "--format", "json"]
     )
     assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert all(v["severity"] == "info" for v in payload["violations"] if v["code"] == "S001")
 
 
 def test_lint_with_invalid_config_exits_2(

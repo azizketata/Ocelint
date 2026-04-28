@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from ocelint.model import OcelLog
@@ -29,10 +29,18 @@ class Rule:
 
 
 def run_rules(log: OcelLog, rules: Iterable[Rule]) -> list[Violation]:
-    """Execute rules against the log; return violations sorted by (code, location)."""
+    """Execute rules against the log; return violations sorted by (code, location).
+
+    Each emitted violation's severity is rewritten to its rule's effective
+    severity, so config-time severity overrides propagate even though rules
+    hard-code severity inside their check() functions.
+    """
     violations: list[Violation] = []
     for rule in rules:
-        violations.extend(rule.check(log))
+        for v in rule.check(log):
+            if v.severity != rule.severity:
+                v = replace(v, severity=rule.severity)
+            violations.append(v)
     return sorted(violations, key=lambda v: (v.code, v.location or ""))
 
 
