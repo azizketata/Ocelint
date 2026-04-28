@@ -1,0 +1,82 @@
+{
+  "name": "ocelint",
+  "displayName": "OCELint",
+  "description": "Semantic linter for OCEL 2.0 event logs.",
+  "version": "0.1.0",
+  "publisher": "azizketata",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/azizketata/ocelint.git",
+    "directory": "ocelint-vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Linters"],
+  "keywords": ["ocel", "process-mining", "linter", "object-centric"],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:json",
+    "onLanguage:xml",
+    "workspaceContains:**/*.jsonocel",
+    "workspaceContains:**/*.xmlocel",
+    "workspaceContains:**/*.sqliteocel"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ocelint.lintCurrentFile",
+        "title": "OCELint: Lint current file"
+      },
+      {
+        "command": "ocelint.showOutput",
+        "title": "OCELint: Show output channel"
+      }
+    ],
+    "configuration": {
+      "title": "OCELint",
+      "properties": {
+        "ocelint.executablePath": {
+          "type": "string",
+          "default": "ocelint",
+          "description": "Path to the ocelint executable. Use absolute path if not on PATH."
+        },
+        "ocelint.lintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-run ocelint when an OCEL file is saved."
+        },
+        "ocelint.lintOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run ocelint when an OCEL file is opened."
+        },
+        "ocelint.maxFileSizeMB": {
+          "type": "number",
+          "default": 50,
+          "description": "Skip files larger than this. SQLite logs can be hundreds of MB."
+        },
+        "ocelint.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional --config path passed to ocelint (e.g. ./pyproject.toml)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package --no-dependencies",
+    "compile": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.4.0"
+  }
+}
