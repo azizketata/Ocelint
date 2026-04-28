@@ -1,0 +1,68 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Testing / coverage
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.benchmarks/
+.mutmut-cache
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Documentation builds
+docs/_build/
+site/
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OCEL fixture artifacts that should not be committed
+tests/fixtures/reference/*.sqlite
+tests/fixtures/reference/*.json
+tests/fixtures/reference/*.xml
+!tests/fixtures/reference/.gitkeep
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build / release artifacts
+*.log
+*.tmp
+
+CLAUDE.md
