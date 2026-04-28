@@ -225,3 +225,126 @@ def test_lint_with_invalid_config_exits_2(
     )
     assert result.exit_code == 2
     assert "select" in result.stderr
+
+
+# --- init subcommand -----------------------------------------------------
+
+
+def test_init_creates_new_pyproject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["init"])
+    assert result.exit_code == 0
+    pp = tmp_path / "pyproject.toml"
+    assert pp.exists()
+    body = pp.read_text(encoding="utf-8")
+    assert "[tool.ocelint]" in body
+    assert "[tool.ocelint.severity]" in body
+    assert "S001" in body
+
+
+def test_init_appends_to_existing_pyproject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text('[project]\nname = "x"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["init"])
+    assert result.exit_code == 0
+    body = pp.read_text(encoding="utf-8")
+    assert '[project]' in body
+    assert "[tool.ocelint]" in body
+
+
+def test_init_refuses_when_section_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text('[tool.ocelint]\nselect = ["S001"]\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(main, ["init"])
+    assert result.exit_code == 1
+    assert "already contains" in result.stderr
+
+
+# --- R008 with expected-types config -------------------------------------
+
+
+@pytest.fixture
+def log_with_e2o(tmp_path: Path) -> Path:
+    payload = {
+        "eventTypes": [{"name": "Create Order", "attributes": []}],
+        "objectTypes": [
+            {"name": "Order", "attributes": []},
+            {"name": "Invoice", "attributes": []},
+        ],
+        "events": [
+            {"id": "e1", "type": "Create Order", "time": "2026-01-01T00:00:00Z",
+             "attributes": [],
+             "relationships": [
+                 {"objectId": "o1", "qualifier": "creates"},
+                 {"objectId": "i1", "qualifier": "creates"},
+             ]},
+        ],
+        "objects": [
+            {"id": "o1", "type": "Order", "attributes": [], "relationships": []},
+            {"id": "i1", "type": "Invoice", "attributes": [], "relationships": []},
+        ],
+    }
+    p = tmp_path / "log.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+    return p
+
+
+def test_r008_silent_without_config(log_with_e2o: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["lint", str(log_with_e2o), "--format", "json"])
+    payload = json.loads(result.output)
+    assert all(v["code"] != "R008" for v in payload["violations"])
+
+
+def test_r008_fires_on_unexpected_type(
+    tmp_path: Path, log_with_e2o: Path
+) -> None:
+    cfg = tmp_path / "ocelint-config.toml"
+    cfg.write_text(
+        """
+[tool.ocelint]
+[tool.ocelint.expected-types]
+"Create Order" = ["Order"]
+""",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(log_with_e2o), "--config", str(cfg), "--format", "json"]
+    )
+    payload = json.loads(result.output)
+    r008s = [v for v in payload["violations"] if v["code"] == "R008"]
+    assert len(r008s) == 1
+    assert "Invoice" in r008s[0]["message"]
+    assert r008s[0]["severity"] == "info"
+
+
+def test_r008_silent_when_types_match(
+    tmp_path: Path, log_with_e2o: Path
+) -> None:
+    cfg = tmp_path / "ocelint-config.toml"
+    cfg.write_text(
+        """
+[tool.ocelint]
+[tool.ocelint.expected-types]
+"Create Order" = ["Order", "Invoice"]
+""",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(log_with_e2o), "--config", str(cfg), "--format", "json"]
+    )
+    payload = json.loads(result.output)
+    assert all(v["code"] != "R008" for v in payload["violations"])

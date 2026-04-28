@@ -183,3 +183,48 @@ def test_filter_select_S_keeps_only_s_rules() -> None:
 def test_filter_ignore_R_drops_all_r_rules() -> None:
     out = filter_rules(BUILTIN_RULES, Config(ignore=["R"]))
     assert all(not r.code.startswith("R") for r in out)
+
+
+# --- expected-types config -----------------------------------------------
+
+
+def test_load_config_expected_types(tmp_path: Path) -> None:
+    p = _write_pyproject(
+        tmp_path,
+        """
+[tool.ocelint.expected-types]
+"Create Order" = ["Order"]
+"Pay Order" = ["Order", "Customer"]
+""",
+    )
+    cfg = load_config(p)
+    assert cfg.expected_types == {
+        "Create Order": ["Order"],
+        "Pay Order": ["Order", "Customer"],
+    }
+
+
+def test_load_config_expected_types_invalid_value(tmp_path: Path) -> None:
+    p = _write_pyproject(
+        tmp_path,
+        """
+[tool.ocelint.expected-types]
+"Create Order" = "Order"
+""",
+    )
+    with pytest.raises(ConfigError, match="expected-types"):
+        load_config(p)
+
+
+# --- render_init_template ------------------------------------------------
+
+
+def test_render_init_template_lists_all_rules() -> None:
+    from ocelint.config import render_init_template
+
+    template = render_init_template(BUILTIN_RULES)
+    assert "[tool.ocelint]" in template
+    assert "[tool.ocelint.severity]" in template
+    for rule in BUILTIN_RULES:
+        assert rule.code in template
+        assert rule.severity in template

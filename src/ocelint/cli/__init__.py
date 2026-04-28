@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import json as _json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import click
 
 from ocelint import __version__
-from ocelint.config import ConfigError, filter_rules, load_config
+from ocelint.config import ConfigError, filter_rules, load_config, render_init_template
 from ocelint.engine import Rule, Violation, max_severity, run_rules
 from ocelint.loader import ParseError, load
 from ocelint.model import OcelLog
 from ocelint.rules import BUILTIN_RULES
+from ocelint.rules.referential import make_r008_check
 
 _SEVERITY_TO_SARIF: dict[str, str] = {
     "error": "error",
@@ -59,6 +61,11 @@ def lint(file: Path, fmt: str, config_path: Path | None) -> None:
         sys.exit(2)
 
     rules = filter_rules(BUILTIN_RULES, cfg)
+    if cfg.expected_types:
+        rules = [
+            replace(r, check=make_r008_check(cfg.expected_types)) if r.code == "R008" else r
+            for r in rules
+        ]
 
     try:
         log = load(file)
@@ -89,6 +96,31 @@ def list_rules() -> None:
     """List built-in rules."""
     for rule in BUILTIN_RULES:
         click.echo(f"{rule.code}  {rule.severity:5}  {rule.description}")
+
+
+@main.command()
+def init() -> None:
+    """Generate a [tool.ocelint] config block in pyproject.toml."""
+    pp = Path("pyproject.toml")
+    template = render_init_template(BUILTIN_RULES)
+
+    if not pp.exists():
+        pp.write_text(template, encoding="utf-8")
+        click.echo("Created pyproject.toml with [tool.ocelint] block.")
+        return
+
+    existing = pp.read_text(encoding="utf-8")
+    if "[tool.ocelint]" in existing:
+        click.echo(
+            "pyproject.toml already contains a [tool.ocelint] block; remove it first.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if not existing.endswith("\n"):
+        existing += "\n"
+    pp.write_text(existing + "\n" + template, encoding="utf-8")
+    click.echo("Appended [tool.ocelint] block to pyproject.toml.")
 
 
 def _compute_exit_code(violations: list[Violation]) -> int:

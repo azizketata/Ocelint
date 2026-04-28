@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from ocelint.engine import Rule, Violation
 from ocelint.model import OcelLog
@@ -144,6 +144,48 @@ def _attr_missing(attrs: object, name: str) -> bool:
     return isinstance(value, list) and len(value) == 0
 
 
+def _check_r008_noop(_log: OcelLog) -> Iterator[Violation]:
+    return
+    yield  # pragma: no cover
+
+
+def make_r008_check(
+    expected_types: dict[str, list[str]],
+) -> Callable[[OcelLog], Iterator[Violation]]:
+    """Build R008's check function bound to an expected-types map."""
+    expected_sets = {et: set(otypes) for et, otypes in expected_types.items()}
+
+    def check(log: OcelLog) -> Iterator[Violation]:
+        if len(log.events) == 0 or len(log.relations_e2o) == 0:
+            return
+        eid_to_etype = dict(zip(log.events["eid"], log.events["etype"], strict=False))
+        oid_to_otype = dict(zip(log.objects["oid"], log.objects["otype"], strict=False))
+        seen: set[tuple[str, str]] = set()
+        for _, rel in log.relations_e2o.iterrows():
+            etype = eid_to_etype.get(rel["eid"])
+            otype = oid_to_otype.get(rel["oid"])
+            if etype is None or otype is None:
+                continue
+            allowed = expected_sets.get(etype)
+            if allowed is None or otype in allowed:
+                continue
+            key = (etype, otype)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield Violation(
+                code="R008",
+                severity="info",
+                message=(
+                    f"Event type {etype!r} references object of type {otype!r}; "
+                    f"expected one of {sorted(allowed)}"
+                ),
+                location=f"event_object[etype={etype},otype={otype}]",
+            )
+
+    return check
+
+
 R001 = Rule(
     code="R001",
     severity="error",
@@ -193,5 +235,12 @@ R007 = Rule(
     check=_check_r007,
 )
 
+R008 = Rule(
+    code="R008",
+    severity="info",
+    description="E2O references object of unexpected type (requires expected-types config).",
+    check=_check_r008_noop,
+)
 
-__all__ = ["R001", "R002", "R003", "R004", "R005", "R006", "R007"]
+
+__all__ = ["R001", "R002", "R003", "R004", "R005", "R006", "R007", "R008", "make_r008_check"]
