@@ -1,0 +1,85 @@
+name: vscode-extension
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ocelint-vscode/**"
+      - ".github/workflows/vscode.yml"
+    tags:
+      - "vscode-v*"
+  pull_request:
+    paths:
+      - "ocelint-vscode/**"
+      - ".github/workflows/vscode.yml"
+
+defaults:
+  run:
+    working-directory: ocelint-vscode
+
+jobs:
+  build:
+    name: build + package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ocelint-vscode/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Upload VSIX as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocelint-vsix
+          path: ocelint-vscode/*.vsix
+          if-no-files-found: error
+
+  publish:
+    name: publish to Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish on a `vscode-vX.Y.Z` tag, never on branch pushes or PRs.
+    if: startsWith(github.ref, 'refs/tags/vscode-v')
+    environment: vscode-marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ocelint-vscode/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#vscode-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "tag=$TAG_VERSION pkg=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $TAG_VERSION does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --no-dependencies
