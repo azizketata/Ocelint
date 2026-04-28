@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata as _md
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
 from typing import Literal
@@ -56,4 +57,29 @@ def max_severity(violations: Iterable[Violation]) -> Severity | None:
     return found
 
 
-__all__ = ["Rule", "Severity", "Violation", "max_severity", "run_rules"]
+def discover_plugin_rules() -> list[Rule]:
+    """Discover Rule objects registered via the 'ocelint.rules' entry point group.
+
+    Each entry point may expose either a single Rule or a list of Rules.
+    """
+    out: list[Rule] = []
+    for entry in _md.entry_points(group="ocelint.rules"):
+        try:
+            loaded = entry.load()
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(loaded, Rule):
+            out.append(loaded)
+        elif isinstance(loaded, (list, tuple)):
+            out.extend(item for item in loaded if isinstance(item, Rule))
+    return out
+
+
+__all__ = [
+    "Rule",
+    "Severity",
+    "Violation",
+    "discover_plugin_rules",
+    "max_severity",
+    "run_rules",
+]

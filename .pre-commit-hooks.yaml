@@ -1,0 +1,7 @@
+- id: ocelint
+  name: ocelint
+  description: Lint OCEL 2.0 event logs.
+  entry: ocelint lint
+  language: python
+  files: '\.(json|jsonocel|xml|xmlocel|sqlite|sqlite3)$'
+  pass_filenames: true

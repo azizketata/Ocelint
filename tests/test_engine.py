@@ -78,3 +78,21 @@ def test_max_severity_warn_only() -> None:
 
 def test_max_severity_empty() -> None:
     assert max_severity([]) is None
+
+
+def test_discover_plugin_rules_empty_when_no_plugins() -> None:
+    """No third-party rule packs installed -> empty list, no errors."""
+    from ocelint.engine import discover_plugin_rules
+
+    assert discover_plugin_rules() == []
+
+
+def test_sdk_reexports_public_types() -> None:
+    """The ocelint.sdk module exposes the API needed by plugin authors."""
+    from ocelint.sdk import OcelLog as SdkOcelLog
+    from ocelint.sdk import Rule as SdkRule
+    from ocelint.sdk import Violation as SdkViolation
+
+    assert SdkOcelLog is OcelLog or SdkOcelLog.__name__ == "OcelLog"
+    assert SdkRule is Rule or SdkRule.__name__ == "Rule"
+    assert SdkViolation is Violation or SdkViolation.__name__ == "Violation"

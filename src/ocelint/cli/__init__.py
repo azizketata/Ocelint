@@ -12,7 +12,13 @@ import click
 
 from ocelint import __version__
 from ocelint.config import ConfigError, filter_rules, load_config, render_init_template
-from ocelint.engine import Rule, Violation, max_severity, run_rules
+from ocelint.engine import (
+    Rule,
+    Violation,
+    discover_plugin_rules,
+    max_severity,
+    run_rules,
+)
 from ocelint.loader import ParseError, load
 from ocelint.model import OcelLog
 from ocelint.rules import BUILTIN_RULES
@@ -60,7 +66,8 @@ def lint(file: Path, fmt: str, config_path: Path | None) -> None:
         click.echo(str(e), err=True)
         sys.exit(2)
 
-    rules = filter_rules(BUILTIN_RULES, cfg)
+    all_rules = BUILTIN_RULES + discover_plugin_rules()
+    rules = filter_rules(all_rules, cfg)
     if cfg.expected_types:
         rules = [
             replace(r, check=make_r008_check(cfg.expected_types)) if r.code == "R008" else r
