@@ -1,1 +1,1 @@
-"""OCEL-L: logical / structural semantic rules (L001–L007)."""
+"""OCEL-L: logical / structural semantic rules (L001-L007)."""

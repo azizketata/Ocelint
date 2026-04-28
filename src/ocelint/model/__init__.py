@@ -43,12 +43,12 @@ class OcelLog:
 
 __all__ = [
     "ATTRIBUTE_DECLS_COLUMNS",
+    "E2O_COLUMNS",
     "EVENTS_COLUMNS",
     "EVENT_TYPES_COLUMNS",
-    "E2O_COLUMNS",
+    "O2O_COLUMNS",
     "OBJECTS_COLUMNS",
     "OBJECT_TYPES_COLUMNS",
-    "O2O_COLUMNS",
     "OcelLog",
     "SourceFormat",
 ]
