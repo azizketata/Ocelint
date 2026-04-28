@@ -15,6 +15,8 @@ _ISO_8601_RE = re.compile(
     r"([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?"
     r"(Z|[+-]\d{2}:?\d{2})?$"
 )
+_HAS_TIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+_HAS_ZONE_RE = re.compile(r"(Z|[+-]\d{2}:?\d{2})$")
 
 
 def _check_s001(log: OcelLog) -> Iterator[Violation]:
@@ -171,6 +173,167 @@ def _check_s008(log: OcelLog) -> Iterator[Violation]:
             )
 
 
+def _check_s009(log: OcelLog) -> Iterator[Violation]:
+    if len(log.events) == 0:
+        return
+    naive_count = 0
+    sample: str | None = None
+    for ts in log.events["timestamp"]:
+        if not isinstance(ts, str):
+            continue
+        if _ISO_8601_RE.match(ts) is None:
+            continue
+        if _HAS_TIME_RE.search(ts) is None:
+            continue
+        if _HAS_ZONE_RE.search(ts) is None:
+            naive_count += 1
+            if sample is None:
+                sample = ts
+    if naive_count > 0:
+        yield Violation(
+            code="S009",
+            severity="warn",
+            message=(
+                f"{naive_count} timestamp(s) lack timezone offset (e.g., {sample!r})"
+            ),
+            location="events[timestamp]",
+        )
+
+
+def _check_s010(log: OcelLog) -> Iterator[Violation]:
+    if len(log.attribute_decls) == 0:
+        return
+    decls = log.attribute_decls
+    yield from _check_attribute_types(
+        scope="event",
+        df=log.events,
+        type_col="etype",
+        decls=decls[decls["scope"] == "event"],
+        is_object_scope=False,
+    )
+    yield from _check_attribute_types(
+        scope="object",
+        df=log.objects,
+        type_col="otype",
+        decls=decls[decls["scope"] == "object"],
+        is_object_scope=True,
+    )
+
+
+def _check_attribute_types(
+    *,
+    scope: str,
+    df: pd.DataFrame,
+    type_col: str,
+    decls: pd.DataFrame,
+    is_object_scope: bool,
+) -> Iterator[Violation]:
+    if len(df) == 0 or len(decls) == 0:
+        return
+    for _, decl in decls.iterrows():
+        type_name = decl["type_name"]
+        attr_name = decl["attribute_name"]
+        ocel_type = decl["attribute_type"]
+        of_type = df[df[type_col] == type_name]
+        if len(of_type) == 0:
+            continue
+        bad_count = 0
+        sample: object = None
+        for attrs in of_type["attrs"]:
+            if not isinstance(attrs, dict) or attr_name not in attrs:
+                continue
+            value = attrs[attr_name]
+            for v in _iter_attribute_values(value, is_object_scope):
+                if v is None or _value_matches_ocel_type(v, ocel_type):
+                    continue
+                bad_count += 1
+                if sample is None:
+                    sample = v
+        if bad_count > 0:
+            yield Violation(
+                code="S010",
+                severity="error",
+                message=(
+                    f"{scope.capitalize()} type {type_name!r}, attribute {attr_name!r}: "
+                    f"declared {ocel_type!r} but {bad_count} value(s) do not match "
+                    f"(e.g., {sample!r})"
+                ),
+                location=f"{scope}s[type={type_name}].attrs[{attr_name}]",
+            )
+
+
+def _iter_attribute_values(value: object, is_object_scope: bool) -> Iterator[object]:
+    if not is_object_scope:
+        yield value
+        return
+    if not isinstance(value, list):
+        return
+    for entry in value:
+        if isinstance(entry, tuple) and len(entry) == 2:
+            yield entry[1]
+
+
+def _value_matches_ocel_type(value: object, ocel_type: str) -> bool:
+    if ocel_type == "string":
+        return isinstance(value, str)
+    if ocel_type == "integer":
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return True
+        if isinstance(value, str):
+            try:
+                int(value)
+            except ValueError:
+                return False
+            return True
+        return False
+    if ocel_type == "float":
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, (int, float)):
+            return True
+        if isinstance(value, str):
+            try:
+                float(value)
+            except ValueError:
+                return False
+            return True
+        return False
+    if ocel_type == "boolean":
+        if isinstance(value, bool):
+            return True
+        if isinstance(value, int) and value in (0, 1):
+            return True
+        return (
+            isinstance(value, str)
+            and value.strip().lower() in {"true", "false", "0", "1"}
+        )
+    if ocel_type == "time":
+        return isinstance(value, str)
+    return True
+
+
+def _check_s011(log: OcelLog) -> Iterator[Violation]:
+    if len(log.events) == 0:
+        yield Violation(
+            code="S011",
+            severity="error",
+            message="Log contains zero events",
+            location="events",
+        )
+
+
+def _check_s012(log: OcelLog) -> Iterator[Violation]:
+    if len(log.events) > 0 and len(log.objects) == 0:
+        yield Violation(
+            code="S012",
+            severity="warn",
+            message="Log contains events but zero objects",
+            location="objects",
+        )
+
+
 S001 = Rule(
     code="S001",
     severity="error",
@@ -220,5 +383,36 @@ S008 = Rule(
     check=_check_s008,
 )
 
+S009 = Rule(
+    code="S009",
+    severity="warn",
+    description="Naive timestamp without timezone offset or Z suffix.",
+    check=_check_s009,
+)
 
-__all__ = ["S001", "S002", "S003", "S004", "S005", "S006", "S008"]
+S010 = Rule(
+    code="S010",
+    severity="error",
+    description="Attribute value does not match declared type.",
+    check=_check_s010,
+)
+
+S011 = Rule(
+    code="S011",
+    severity="error",
+    description="Empty event table: log contains zero events.",
+    check=_check_s011,
+)
+
+S012 = Rule(
+    code="S012",
+    severity="warn",
+    description="Empty object table: events exist but zero objects declared.",
+    check=_check_s012,
+)
+
+
+__all__ = [
+    "S001", "S002", "S003", "S004", "S005", "S006", "S008",
+    "S009", "S010", "S011", "S012",
+]

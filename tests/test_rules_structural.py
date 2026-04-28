@@ -16,7 +16,19 @@ from ocelint.model import (
     OBJECTS_COLUMNS,
     OcelLog,
 )
-from ocelint.rules.structural import S001, S002, S003, S004, S005, S006, S008
+from ocelint.rules.structural import (
+    S001,
+    S002,
+    S003,
+    S004,
+    S005,
+    S006,
+    S008,
+    S009,
+    S010,
+    S011,
+    S012,
+)
 
 
 def _make_log(
@@ -314,3 +326,175 @@ def test_s008_skips_none() -> None:
     )
     log = _make_log(events=events)
     assert list(S008.check(log)) == []
+
+
+# --- S009 naive timestamp -------------------------------------------------
+
+
+def test_s009_clean_with_zone() -> None:
+    events = pd.DataFrame(
+        [
+            {"eid": "e1", "etype": "T", "timestamp": "2026-01-01T00:00:00Z", "attrs": {}},
+            {"eid": "e2", "etype": "T", "timestamp": "2026-01-01T00:00:00+02:00", "attrs": {}},
+        ]
+    )
+    log = _make_log(events=events)
+    assert list(S009.check(log)) == []
+
+
+def test_s009_fires_on_naive() -> None:
+    events = pd.DataFrame(
+        [
+            {"eid": f"e{i}", "etype": "T", "timestamp": "2026-01-01T00:00:00", "attrs": {}}
+            for i in range(5)
+        ]
+    )
+    log = _make_log(events=events)
+    violations = list(S009.check(log))
+    assert len(violations) == 1
+    assert violations[0].severity == "warn"
+    assert "5 timestamp" in violations[0].message
+
+
+def test_s009_skips_non_iso() -> None:
+    """S008 catches non-ISO; S009 should not double-fire on bad formats."""
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "T", "timestamp": "04/28/2026", "attrs": {}}]
+    )
+    log = _make_log(events=events)
+    assert list(S009.check(log)) == []
+
+
+def test_s009_skips_date_only() -> None:
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "T", "timestamp": "2026-01-01", "attrs": {}}]
+    )
+    log = _make_log(events=events)
+    assert list(S009.check(log)) == []
+
+
+# --- S010 attribute type mismatch ----------------------------------------
+
+
+def _decls_event(type_name: str, attr_name: str, attr_type: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"scope": "event", "type_name": type_name, "attribute_name": attr_name,
+          "attribute_type": attr_type}]
+    )
+
+
+def _decls_object(type_name: str, attr_name: str, attr_type: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"scope": "object", "type_name": type_name, "attribute_name": attr_name,
+          "attribute_type": attr_type}]
+    )
+
+
+def test_s010_clean_native_types() -> None:
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "Foo", "timestamp": "t",
+          "attrs": {"price": 9.99, "count": 3, "ok": True, "name": "alice"}}]
+    )
+    decls = pd.DataFrame(
+        [
+            {"scope": "event", "type_name": "Foo", "attribute_name": "price",
+             "attribute_type": "float"},
+            {"scope": "event", "type_name": "Foo", "attribute_name": "count",
+             "attribute_type": "integer"},
+            {"scope": "event", "type_name": "Foo", "attribute_name": "ok",
+             "attribute_type": "boolean"},
+            {"scope": "event", "type_name": "Foo", "attribute_name": "name",
+             "attribute_type": "string"},
+        ]
+    )
+    log = _make_log(events=events, attribute_decls=decls)
+    assert list(S010.check(log)) == []
+
+
+def test_s010_accepts_string_for_parseable_float() -> None:
+    """XML loader returns strings; if string parses as float, S010 stays quiet."""
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "Foo", "timestamp": "t", "attrs": {"price": "9.99"}}]
+    )
+    log = _make_log(events=events, attribute_decls=_decls_event("Foo", "price", "float"))
+    assert list(S010.check(log)) == []
+
+
+def test_s010_fires_on_unparseable_string_float() -> None:
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "Foo", "timestamp": "t", "attrs": {"price": "abc"}}]
+    )
+    log = _make_log(events=events, attribute_decls=_decls_event("Foo", "price", "float"))
+    violations = list(S010.check(log))
+    assert len(violations) == 1
+    assert violations[0].severity == "error"
+    assert "price" in violations[0].message
+    assert "abc" in violations[0].message
+
+
+def test_s010_accepts_boolean_strings() -> None:
+    events = pd.DataFrame(
+        [
+            {"eid": "e1", "etype": "Foo", "timestamp": "t", "attrs": {"ok": "True"}},
+            {"eid": "e2", "etype": "Foo", "timestamp": "t", "attrs": {"ok": "false"}},
+            {"eid": "e3", "etype": "Foo", "timestamp": "t", "attrs": {"ok": 1}},
+        ]
+    )
+    log = _make_log(events=events, attribute_decls=_decls_event("Foo", "ok", "boolean"))
+    assert list(S010.check(log)) == []
+
+
+def test_s010_fires_on_object_attr_mismatch() -> None:
+    objects = pd.DataFrame(
+        [{"oid": "o1", "otype": "Order",
+          "attrs": {"amount": [("t1", "abc"), ("t2", "9.99")]}}]
+    )
+    log = _make_log(objects=objects, attribute_decls=_decls_object("Order", "amount", "float"))
+    violations = list(S010.check(log))
+    assert len(violations) == 1
+    assert "abc" in violations[0].message
+
+
+# --- S011 empty event table ----------------------------------------------
+
+
+def test_s011_fires_on_empty_events() -> None:
+    log = _make_log()
+    violations = list(S011.check(log))
+    assert len(violations) == 1
+    assert violations[0].severity == "error"
+
+
+def test_s011_clean_with_events() -> None:
+    log = _make_log(events=pd.DataFrame(
+        [{"eid": "e1", "etype": "T", "timestamp": "t", "attrs": {}}]
+    ))
+    assert list(S011.check(log)) == []
+
+
+# --- S012 empty object table ---------------------------------------------
+
+
+def test_s012_fires_when_events_but_no_objects() -> None:
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "T", "timestamp": "t", "attrs": {}}]
+    )
+    log = _make_log(events=events)
+    violations = list(S012.check(log))
+    assert len(violations) == 1
+    assert violations[0].severity == "warn"
+
+
+def test_s012_silent_when_both_empty() -> None:
+    """When events are also empty, S011 covers it — S012 stays quiet."""
+    log = _make_log()
+    assert list(S012.check(log)) == []
+
+
+def test_s012_clean_with_both() -> None:
+    events = pd.DataFrame(
+        [{"eid": "e1", "etype": "T", "timestamp": "t", "attrs": {}}]
+    )
+    objects = pd.DataFrame([{"oid": "o1", "otype": "Order", "attrs": {}}])
+    log = _make_log(events=events, objects=objects)
+    assert list(S012.check(log)) == []
