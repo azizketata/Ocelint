@@ -120,7 +120,7 @@ def _check_p003(log: OcelLog, threshold: int = 30) -> Iterator[Violation]:
 def _build_object_event_sequences(
     log: OcelLog,
 ) -> dict[str, list[tuple[object, str, str]]]:
-    """oid -> sorted list of (time, etype, eid). Time is datetime, kept as object for sortability."""
+    """oid -> sorted list of (time, etype, eid). Time is datetime, typed as object."""
     eid_info: dict[str, tuple[str, object]] = {}
     for _, ev in log.events.iterrows():
         ts = ev["timestamp"]

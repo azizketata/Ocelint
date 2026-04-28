@@ -14,27 +14,33 @@ from ocelint.cli import main
 
 @pytest.fixture
 def empty_log(tmp_path: Path) -> Path:
-    """Minimally-clean log: two events with repeated qualifier, no rule violations."""
+    """Clean log: 30 events on 30 own-objects chained via O2O, satisfies all rules."""
+    events = [
+        {
+            "id": f"e{i}",
+            "type": "T",
+            "time": f"2026-01-01T00:{i:02}:00Z",
+            "attributes": [],
+            "relationships": [{"objectId": f"o{i}", "qualifier": "creates"}],
+        }
+        for i in range(30)
+    ]
+    objects = [
+        {
+            "id": f"o{i}",
+            "type": "Order",
+            "attributes": [],
+            "relationships": (
+                [{"objectId": f"o{i + 1}", "qualifier": "next"}] if i < 29 else []
+            ),
+        }
+        for i in range(30)
+    ]
     payload = {
         "eventTypes": [{"name": "T", "attributes": []}],
         "objectTypes": [{"name": "Order", "attributes": []}],
-        "events": [
-            {
-                "id": "e1",
-                "type": "T",
-                "time": "2026-01-01T00:00:00Z",
-                "attributes": [],
-                "relationships": [{"objectId": "o1", "qualifier": "creates"}],
-            },
-            {
-                "id": "e2",
-                "type": "T",
-                "time": "2026-01-02T00:00:00Z",
-                "attributes": [],
-                "relationships": [{"objectId": "o1", "qualifier": "creates"}],
-            },
-        ],
-        "objects": [{"id": "o1", "type": "Order", "attributes": [], "relationships": []}],
+        "events": events,
+        "objects": objects,
     }
     p = tmp_path / "log.json"
     p.write_text(json.dumps(payload), encoding="utf-8")
@@ -69,8 +75,8 @@ def test_lint_json_output(empty_log: Path) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["source_format"] == "json"
-    assert payload["events"] == 2
-    assert payload["objects"] == 1
+    assert payload["events"] == 30
+    assert payload["objects"] == 30
     assert payload["violations"] == []
     assert payload["parse_warnings"] == []
 
@@ -276,6 +282,31 @@ def test_init_refuses_when_section_exists(
     result = runner.invoke(main, ["init"])
     assert result.exit_code == 1
     assert "already contains" in result.stderr
+
+
+# --- explain subcommand --------------------------------------------------
+
+
+def test_explain_known_rule() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["explain", "S001"])
+    assert result.exit_code == 0
+    assert "S001" in result.output
+    assert "error" in result.output
+
+
+def test_explain_unknown_rule_exits_1() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["explain", "X999"])
+    assert result.exit_code == 1
+    assert "Unknown rule" in result.stderr
+
+
+def test_explain_case_insensitive() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["explain", "s001"])
+    assert result.exit_code == 0
+    assert "S001" in result.output
 
 
 # --- R008 with expected-types config -------------------------------------
