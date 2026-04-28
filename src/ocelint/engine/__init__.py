@@ -66,7 +66,7 @@ def discover_plugin_rules() -> list[Rule]:
     for entry in _md.entry_points(group="ocelint.rules"):
         try:
             loaded = entry.load()
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         if isinstance(loaded, Rule):
             out.append(loaded)

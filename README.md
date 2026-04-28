@@ -2,7 +2,7 @@
 
 A semantic linter for [OCEL 2.0](https://www.ocel-standard.org/) (Object-Centric Event Log) files.
 
-`ocelint` validates OCEL 2.0 logs against 39+ rules across seven categories: structural, referential, temporal, qualifier, logical, complexity, and process-mining readiness. It catches issues that the JSON Schema and SQLite DDL cannot express. Output as plain text, JSON, or SARIF 2.1.0 for CI integration.
+`ocelint` validates OCEL 2.0 logs against 53 rules across seven categories: structural, referential, temporal, qualifier, logical, complexity, and process-mining readiness. It catches issues that the JSON Schema and SQLite DDL cannot express. Output as plain text, JSON, or SARIF 2.1.0 for CI integration.
 
 ## Install
 
@@ -46,7 +46,7 @@ S006 = "info"      # Downgrade an annoying rule
 "Create Order" = ["Order"]   # Powers R008
 ```
 
-## Rules (39 implemented)
+## Rules (53 implemented, 3 deferred)
 
 | Prefix | Category | Codes |
 | --- | --- | --- |
